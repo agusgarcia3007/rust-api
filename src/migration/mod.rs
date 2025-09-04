@@ -9,12 +9,14 @@ impl MigratorTrait for Migrator {
             Box::new(m20231201_000001_create_users_table::Migration),
             Box::new(m20241201_000001_create_token_blacklist::Migration),
             Box::new(m20241201_000002_create_user_session::Migration),
+            Box::new(m20241202_000001_add_email_verification_fields::Migration),
         ]
     }
 }
 
 mod m20241201_000001_create_token_blacklist;
 mod m20241201_000002_create_user_session;
+mod m20241202_000001_add_email_verification_fields;
 
 mod m20231201_000001_create_users_table {
     use super::*;

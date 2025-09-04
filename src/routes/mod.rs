@@ -8,9 +8,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     auth::auth_middleware,
-    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse},
-    handlers::{get_profile, health_check, login, logout, logout_all, refresh_token, register,
-        __path_get_profile, __path_health_check, __path_login, __path_logout, __path_logout_all, __path_refresh_token, __path_register},
+    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse, ConfirmEmailRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse},
+    handlers::{get_profile, health_check, login, logout, logout_all, refresh_token, register, confirm_email, forgot_password, reset_password,
+        __path_get_profile, __path_health_check, __path_login, __path_logout, __path_logout_all, __path_refresh_token, __path_register, __path_confirm_email, __path_forgot_password, __path_reset_password},
     middleware::rate_limit::rate_limit_middleware,
     state::AppState,
 };
@@ -24,10 +24,13 @@ use crate::{
         refresh_token,
         logout,
         get_profile,
-        logout_all
+        logout_all,
+        confirm_email,
+        forgot_password,
+        reset_password
     ),
     components(
-        schemas(RegisterRequest, LoginRequest, RefreshTokenRequest, AuthResponse, RefreshTokenResponse, UserResponse)
+        schemas(RegisterRequest, LoginRequest, RefreshTokenRequest, AuthResponse, RefreshTokenResponse, UserResponse, ConfirmEmailRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse)
     ),
     tags(
         (name = "Health", description = "Health check endpoints"),
@@ -51,6 +54,9 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/login", post(login))
         .route("/refresh", post(refresh_token))
         .route("/logout", post(logout))
+        .route("/confirm-email", post(confirm_email))
+        .route("/forgot-password", post(forgot_password))
+        .route("/reset-password", post(reset_password))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     let protected_routes = Router::new()

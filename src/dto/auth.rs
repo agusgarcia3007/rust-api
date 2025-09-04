@@ -69,3 +69,26 @@ pub struct RefreshClaims {
     pub iat: usize,
     pub token_type: String,
 }
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ConfirmEmailRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ForgotPasswordRequest {
+    #[validate(email(message = "Invalid email format"))]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    #[validate(length(min = 6, message = "Password must be at least 6 characters"))]
+    pub new_password: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MessageResponse {
+    pub message: String,
+}

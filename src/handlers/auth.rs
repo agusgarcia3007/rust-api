@@ -4,11 +4,13 @@ use validator::Validate;
 
 use crate::{
     auth::{hash_password, verify_password},
-    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse},
+    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse, ConfirmEmailRequest, ForgotPasswordRequest, ResetPasswordRequest, MessageResponse},
     entities::{user, User},
-    services::token_service::TokenService,
+    services::{token_service::TokenService, email_service::EmailService},
     state::AppState,
 };
+use rand::Rng;
+use chrono::{Duration, Utc};
 
 #[utoipa::path(
     post,
@@ -62,10 +64,15 @@ pub async fn register(
         )
     })?;
 
+    let verification_token = generate_verification_token();
+    let expires_at = Utc::now() + Duration::hours(24);
+
     let new_user = user::ActiveModel {
-        email: Set(payload.email),
+        email: Set(payload.email.clone()),
         password_hash: Set(password_hash),
-        name: Set(payload.name),
+        name: Set(payload.name.clone()),
+        email_verification_token: Set(Some(verification_token.clone())),
+        email_verification_expires_at: Set(Some(expires_at)),
         ..Default::default()
     };
 
@@ -76,6 +83,25 @@ pub async fn register(
             Json(serde_json::json!({"error": "Failed to create user"})),
         )
     })?;
+
+    let email_service = EmailService::new().map_err(|_| {
+        tracing::error!("Failed to initialize email service");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Email service unavailable"})),
+        )
+    })?;
+
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    
+    if let Err(e) = email_service.send_signup_confirmation(
+        &payload.email,
+        &payload.name,
+        &verification_token,
+        &base_url,
+    ).await {
+        tracing::error!("Failed to send confirmation email: {:?}", e);
+    }
 
     let (access_token, refresh_token_jwt) = TokenService::create_session(
         &app_state.db,
@@ -295,4 +321,254 @@ pub async fn logout_all(
         })?;
 
     Ok(Json(serde_json::json!({"message": "Successfully logged out from all devices"})))
+}
+
+fn generate_verification_token() -> String {
+    let mut rng = rand::thread_rng();
+    let token: String = (0..32)
+        .map(|_| {
+            let idx = rng.gen_range(0..62);
+            match idx {
+                0..=25 => (b'a' + idx) as char,
+                26..=51 => (b'A' + idx - 26) as char,
+                _ => (b'0' + idx - 52) as char,
+            }
+        })
+        .collect();
+    token
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/confirm-email",
+    request_body = ConfirmEmailRequest,
+    responses(
+        (status = 200, description = "Email confirmed successfully", body = MessageResponse),
+        (status = 400, description = "Invalid or expired token"),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
+pub async fn confirm_email(
+    State(app_state): State<AppState>,
+    Json(payload): Json<ConfirmEmailRequest>,
+) -> Result<Json<MessageResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let user = User::find()
+        .filter(user::Column::EmailVerificationToken.eq(&payload.token))
+        .one(&app_state.db)
+        .await
+        .map_err(|err| {
+            tracing::error!("Database error finding user: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?;
+
+    let user = match user {
+        Some(user) => user,
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid verification token"})),
+            ))
+        }
+    };
+
+    if let Some(expires_at) = user.email_verification_expires_at {
+        if Utc::now() > expires_at {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Verification token has expired"})),
+            ));
+        }
+    }
+
+    let mut user_active: user::ActiveModel = user.into();
+    user_active.email_verified = Set(true);
+    user_active.email_verification_token = Set(None);
+    user_active.email_verification_expires_at = Set(None);
+    user_active.updated_at = Set(Utc::now());
+
+    user_active.update(&app_state.db).await.map_err(|err| {
+        tracing::error!("Database error updating user: {:?}", err);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to confirm email"})),
+        )
+    })?;
+
+    Ok(Json(MessageResponse {
+        message: "Email confirmed successfully".to_string(),
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/forgot-password",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset email sent", body = MessageResponse),
+        (status = 400, description = "Validation failed"),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
+pub async fn forgot_password(
+    State(app_state): State<AppState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<Json<MessageResponse>, (StatusCode, Json<serde_json::Value>)> {
+    if let Err(errors) = payload.validate() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Validation failed",
+                "details": errors
+            })),
+        ));
+    }
+
+    let user = User::find()
+        .filter(user::Column::Email.eq(&payload.email))
+        .one(&app_state.db)
+        .await
+        .map_err(|err| {
+            tracing::error!("Database error finding user: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?;
+
+    let user = match user {
+        Some(user) => user,
+        None => {
+            return Ok(Json(MessageResponse {
+                message: "If an account with that email exists, a password reset link has been sent".to_string(),
+            }))
+        }
+    };
+
+    let reset_token = generate_verification_token();
+    let expires_at = Utc::now() + Duration::hours(1);
+
+    let mut user_active: user::ActiveModel = user.clone().into();
+    user_active.password_reset_token = Set(Some(reset_token.clone()));
+    user_active.password_reset_expires_at = Set(Some(expires_at));
+    user_active.updated_at = Set(Utc::now());
+
+    user_active.update(&app_state.db).await.map_err(|err| {
+        tracing::error!("Database error updating user: {:?}", err);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Database error"})),
+        )
+    })?;
+
+    let email_service = EmailService::new().map_err(|_| {
+        tracing::error!("Failed to initialize email service");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Email service unavailable"})),
+        )
+    })?;
+
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    
+    if let Err(e) = email_service.send_password_reset(
+        &user.email,
+        &user.name,
+        &reset_token,
+        &base_url,
+    ).await {
+        tracing::error!("Failed to send password reset email: {:?}", e);
+    }
+
+    Ok(Json(MessageResponse {
+        message: "If an account with that email exists, a password reset link has been sent".to_string(),
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/reset-password",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successfully", body = MessageResponse),
+        (status = 400, description = "Invalid or expired token"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
+pub async fn reset_password(
+    State(app_state): State<AppState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<Json<MessageResponse>, (StatusCode, Json<serde_json::Value>)> {
+    if let Err(errors) = payload.validate() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Validation failed",
+                "details": errors
+            })),
+        ));
+    }
+
+    let user = User::find()
+        .filter(user::Column::PasswordResetToken.eq(&payload.token))
+        .one(&app_state.db)
+        .await
+        .map_err(|err| {
+            tracing::error!("Database error finding user: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Database error"})),
+            )
+        })?;
+
+    let user = match user {
+        Some(user) => user,
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid reset token"})),
+            ))
+        }
+    };
+
+    if let Some(expires_at) = user.password_reset_expires_at {
+        if Utc::now() > expires_at {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Reset token has expired"})),
+            ));
+        }
+    }
+
+    let password_hash = hash_password(&payload.new_password).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to hash password"})),
+        )
+    })?;
+
+    let mut user_active: user::ActiveModel = user.into();
+    user_active.password_hash = Set(password_hash);
+    user_active.password_reset_token = Set(None);
+    user_active.password_reset_expires_at = Set(None);
+    user_active.updated_at = Set(Utc::now());
+
+    user_active.update(&app_state.db).await.map_err(|err| {
+        tracing::error!("Database error updating user: {:?}", err);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to reset password"})),
+        )
+    })?;
+
+    Ok(Json(MessageResponse {
+        message: "Password reset successfully".to_string(),
+    }))
 }
