@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;
     tracing::info!("Server running on http://0.0.0.0:{}", config.port);
     
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await?;
 
     Ok(())
 }
