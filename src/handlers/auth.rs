@@ -10,6 +10,18 @@ use crate::{
     state::AppState,
 };
 
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered successfully", body = AuthResponse),
+        (status = 400, description = "Validation failed"),
+        (status = 409, description = "User already exists"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
 pub async fn register(
     State(app_state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
@@ -92,6 +104,18 @@ pub async fn register(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponse),
+        (status = 400, description = "Validation failed"),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
 pub async fn login(
     State(app_state): State<AppState>,
     Json(payload): Json<LoginRequest>,
@@ -169,6 +193,17 @@ pub async fn login(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/refresh",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Token refreshed successfully", body = RefreshTokenResponse),
+        (status = 401, description = "Invalid refresh token"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
 pub async fn refresh_token(
     State(app_state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
@@ -191,6 +226,17 @@ pub async fn refresh_token(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Logout successful"),
+        (status = 401, description = "Invalid refresh token"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "Authentication"
+)]
 pub async fn logout(
     State(app_state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
@@ -222,6 +268,19 @@ pub async fn logout(
     Ok(Json(serde_json::json!({"message": "Successfully logged out"})))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/logout-all",
+    responses(
+        (status = 200, description = "Logout from all devices successful"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "User"
+)]
 pub async fn logout_all(
     State(app_state): State<AppState>,
     Extension(user): Extension<user::Model>,

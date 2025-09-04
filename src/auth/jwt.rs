@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use rand::{distributions::Alphanumeric, Rng};
 use uuid::Uuid;
 
 use crate::dto::{Claims, RefreshClaims};
@@ -89,13 +88,8 @@ pub fn verify_refresh_token(token: &str, secret: &str) -> Result<RefreshClaims> 
     Ok(token_data.claims)
 }
 
-pub fn generate_secure_token() -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect()
-}
+
+
 
 pub fn hash_password(password: &str) -> Result<String> {
     let cost = if cfg!(debug_assertions) { 4 } else { bcrypt::DEFAULT_COST };

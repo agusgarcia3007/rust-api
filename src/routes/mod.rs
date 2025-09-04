@@ -3,13 +3,47 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     auth::auth_middleware,
-    handlers::{get_profile, health_check, login, logout, logout_all, refresh_token, register},
+    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse},
+    handlers::{get_profile, health_check, login, logout, logout_all, refresh_token, register,
+        __path_get_profile, __path_health_check, __path_login, __path_logout, __path_logout_all, __path_refresh_token, __path_register},
     middleware::rate_limit::rate_limit_middleware,
     state::AppState,
 };
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        health_check,
+        register,
+        login,
+        refresh_token,
+        logout,
+        get_profile,
+        logout_all
+    ),
+    components(
+        schemas(RegisterRequest, LoginRequest, RefreshTokenRequest, AuthResponse, RefreshTokenResponse, UserResponse)
+    ),
+    tags(
+        (name = "Health", description = "Health check endpoints"),
+        (name = "Authentication", description = "Authentication endpoints"),
+        (name = "User", description = "User management endpoints")
+    ),
+    info(
+        title = "Rust Auth API",
+        version = "0.1.0",
+        description = "A REST API for user authentication and management built with Rust and Axum"
+    ),
+    servers(
+        (url = "http://localhost:4444", description = "Development server")
+    )
+)]
+pub struct ApiDoc;
 
 pub fn create_routes(app_state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -31,5 +65,6 @@ pub fn create_routes(app_state: AppState) -> Router {
         .route("/", get(health_check))
         .nest("/auth", auth_routes)
         .nest("/user", protected_routes)
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .with_state(app_state)
 }

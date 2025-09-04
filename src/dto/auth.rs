@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RegisterRequest {
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
@@ -12,7 +13,7 @@ pub struct RegisterRequest {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct LoginRequest {
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
@@ -20,7 +21,7 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -29,19 +30,19 @@ pub struct AuthResponse {
     pub user: UserResponse,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RefreshTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
