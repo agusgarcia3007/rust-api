@@ -4,8 +4,10 @@ mod database;
 mod dto;
 mod entities;
 mod handlers;
+mod middleware;
 mod migration;
 mod routes;
+mod services;
 mod state;
 
 use axum::http::{
@@ -49,8 +51,21 @@ async fn main() -> anyhow::Result<()> {
 
     let app_state = AppState {
         config: config.clone(),
-        db,
+        db: db.clone(),
     };
+
+    let cleanup_db = db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            if let Err(e) = services::token_service::TokenService::cleanup_expired_tokens(&cleanup_db).await {
+                tracing::error!("Failed to cleanup expired tokens: {:?}", e);
+            } else {
+                tracing::info!("Successfully cleaned up expired tokens");
+            }
+        }
+    });
 
     let app = create_routes(app_state)
         .layer(cors)

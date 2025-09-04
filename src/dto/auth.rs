@@ -22,8 +22,23 @@ pub struct LoginRequest {
 
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
-    pub token: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub expires_in: usize,
     pub user: UserResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RefreshTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,6 +54,17 @@ pub struct Claims {
     pub sub: String,
     pub email: String,
     pub name: String,
+    pub jti: String,
     pub exp: usize,
     pub iat: usize,
+    pub token_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RefreshClaims {
+    pub sub: String,
+    pub jti: String,
+    pub exp: usize,
+    pub iat: usize,
+    pub token_type: String,
 }

@@ -5,9 +5,16 @@ pub struct Migrator;
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
-        vec![Box::new(m20231201_000001_create_users_table::Migration)]
+        vec![
+            Box::new(m20231201_000001_create_users_table::Migration),
+            Box::new(m20241201_000001_create_token_blacklist::Migration),
+            Box::new(m20241201_000002_create_user_session::Migration),
+        ]
     }
 }
+
+mod m20241201_000001_create_token_blacklist;
+mod m20241201_000002_create_user_session;
 
 mod m20231201_000001_create_users_table {
     use super::*;

@@ -1,11 +1,12 @@
-use axum::{extract::State, http::StatusCode, response::Json};
+use axum::{extract::State, http::StatusCode, response::Json, Extension};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use validator::Validate;
 
 use crate::{
-    auth::{create_jwt, hash_password, verify_password},
-    dto::{AuthResponse, LoginRequest, RegisterRequest, UserResponse},
+    auth::{hash_password, verify_password},
+    dto::{AuthResponse, LoginRequest, RefreshTokenRequest, RefreshTokenResponse, RegisterRequest, UserResponse},
     entities::{user, User},
+    services::token_service::TokenService,
     state::AppState,
 };
 
@@ -64,15 +65,24 @@ pub async fn register(
         )
     })?;
 
-    let token = create_jwt(&user, &app_state.config.jwt_secret).map_err(|_| {
+    let (access_token, refresh_token_jwt, _refresh_token) = TokenService::create_session(
+        &app_state.db,
+        &user,
+        &app_state.config.jwt_secret,
+        None,
+        None,
+    ).await.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to create token"})),
+            Json(serde_json::json!({"error": "Failed to create session"})),
         )
     })?;
 
     Ok(Json(AuthResponse {
-        token,
+        access_token,
+        refresh_token: refresh_token_jwt,
+        token_type: "Bearer".to_string(),
+        expires_in: 900,
         user: UserResponse {
             id: user.id,
             email: user.email,
@@ -132,15 +142,24 @@ pub async fn login(
         ));
     }
 
-    let token = create_jwt(&user, &app_state.config.jwt_secret).map_err(|_| {
+    let (access_token, refresh_token_jwt, _refresh_token) = TokenService::create_session(
+        &app_state.db,
+        &user,
+        &app_state.config.jwt_secret,
+        None,
+        None,
+    ).await.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Failed to create token"})),
+            Json(serde_json::json!({"error": "Failed to create session"})),
         )
     })?;
 
     Ok(Json(AuthResponse {
-        token,
+        access_token,
+        refresh_token: refresh_token_jwt,
+        token_type: "Bearer".to_string(),
+        expires_in: 900,
         user: UserResponse {
             id: user.id,
             email: user.email,
@@ -148,4 +167,74 @@ pub async fn login(
             created_at: user.created_at,
         },
     }))
+}
+
+pub async fn refresh_token(
+    State(app_state): State<AppState>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> Result<Json<RefreshTokenResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let new_access_token = TokenService::refresh_access_token(
+        &app_state.db,
+        &payload.refresh_token,
+        &payload.refresh_token,
+        &app_state.config.jwt_secret,
+    ).await.map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Invalid refresh token"})),
+        )
+    })?;
+
+    Ok(Json(RefreshTokenResponse {
+        access_token: new_access_token,
+        token_type: "Bearer".to_string(),
+        expires_in: 900,
+    }))
+}
+
+pub async fn logout(
+    State(app_state): State<AppState>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let refresh_claims = crate::auth::verify_refresh_token(&payload.refresh_token, &app_state.config.jwt_secret)
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Invalid refresh token"})),
+            )
+        })?;
+
+    let user_id = uuid::Uuid::parse_str(&refresh_claims.sub).map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Invalid user ID"})),
+        )
+    })?;
+
+    TokenService::logout_session(&app_state.db, &payload.refresh_token, user_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to logout"})),
+            )
+        })?;
+
+    Ok(Json(serde_json::json!({"message": "Successfully logged out"})))
+}
+
+pub async fn logout_all(
+    State(app_state): State<AppState>,
+    Extension(user): Extension<user::Model>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    TokenService::revoke_all_user_sessions(&app_state.db, user.id, Some("logout_all".to_string()))
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to logout from all devices"})),
+            )
+        })?;
+
+    Ok(Json(serde_json::json!({"message": "Successfully logged out from all devices"})))
 }

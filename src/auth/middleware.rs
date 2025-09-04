@@ -8,8 +8,9 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 use crate::{
-    auth::verify_jwt,
+    auth::verify_access_token,
     entities::{user, User},
+    services::token_service::TokenService,
     state::AppState,
 };
 
@@ -34,7 +35,7 @@ pub async fn auth_middleware(
         None => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    let claims = match verify_jwt(token, &app_state.config.jwt_secret) {
+    let claims = match verify_access_token(token, &app_state.config.jwt_secret) {
         Ok(claims) => claims,
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };
@@ -43,6 +44,15 @@ pub async fn auth_middleware(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };
+
+    let is_blacklisted = match TokenService::is_token_blacklisted(&app_state.db, &claims.jti).await {
+        Ok(blacklisted) => blacklisted,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    if is_blacklisted {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
 
     let user = match User::find()
         .filter(user::Column::Id.eq(user_id))

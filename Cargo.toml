@@ -22,3 +22,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenv = "0.15"
 validator = { version = "0.18", features = ["derive"] }
 async-trait = "0.1"
+rand = "0.8"

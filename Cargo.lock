@@ -1917,6 +1917,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "jsonwebtoken",
+ "rand",
  "sea-orm",
  "sea-orm-migration",
  "serde",
