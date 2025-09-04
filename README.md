@@ -26,7 +26,7 @@ cargo build
 ```bash
 DATABASE_URL=your_postgresql_connection_string
 JWT_SECRET=your-super-secret-jwt-key
-PORT=3000
+PORT=4444
 RUST_LOG=debug
 ```
 
@@ -36,9 +36,28 @@ RUST_LOG=debug
 cargo run
 ```
 
-The server will start on `http://localhost:3000`
+The server will start on `http://localhost:4444`
 
 ## API Endpoints
+
+### Health Check
+
+#### Get server status
+
+```bash
+GET /
+```
+
+Returns:
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2023-12-01T12:00:00.000Z",
+  "service": "rust-api",
+  "version": "0.1.0"
+}
+```
 
 ### Authentication
 
@@ -125,7 +144,7 @@ The API automatically runs database migrations on startup. The user table will b
 Register a user:
 
 ```bash
-curl -X POST http://localhost:3000/auth/register \
+curl -X POST http://localhost:4444/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
 ```
@@ -133,7 +152,7 @@ curl -X POST http://localhost:3000/auth/register \
 Login:
 
 ```bash
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://localhost:4444/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password123"}'
 ```
@@ -141,6 +160,6 @@ curl -X POST http://localhost:3000/auth/login \
 Access protected route:
 
 ```bash
-curl -X GET http://localhost:3000/user/profile \
+curl -X GET http://localhost:4444/user/profile \
   -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE"
 ```

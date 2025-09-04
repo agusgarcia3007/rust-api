@@ -37,7 +37,8 @@ pub fn verify_jwt(token: &str, secret: &str) -> Result<Claims> {
 }
 
 pub fn hash_password(password: &str) -> Result<String> {
-    let hashed = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
+    let cost = if cfg!(debug_assertions) { 4 } else { bcrypt::DEFAULT_COST };
+    let hashed = bcrypt::hash(password, cost)?;
     Ok(hashed)
 }
 

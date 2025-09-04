@@ -27,7 +27,8 @@ pub async fn register(
         .filter(user::Column::Email.eq(&payload.email))
         .one(&app_state.db)
         .await
-        .map_err(|_| {
+        .map_err(|err| {
+            tracing::error!("Database error checking existing user: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Database error"})),
@@ -55,7 +56,8 @@ pub async fn register(
         ..Default::default()
     };
 
-    let user = new_user.insert(&app_state.db).await.map_err(|_| {
+    let user = new_user.insert(&app_state.db).await.map_err(|err| {
+        tracing::error!("Database error creating user: {:?}", err);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "Failed to create user"})),
@@ -98,7 +100,8 @@ pub async fn login(
         .filter(user::Column::Email.eq(&payload.email))
         .one(&app_state.db)
         .await
-        .map_err(|_| {
+        .map_err(|err| {
+            tracing::error!("Database error finding user: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Database error"})),

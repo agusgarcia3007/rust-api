@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     auth::auth_middleware,
-    handlers::{get_profile, login, register},
+    handlers::{get_profile, health_check, login, register},
     state::AppState,
 };
 
@@ -23,6 +23,7 @@ pub fn create_routes(app_state: AppState) -> Router {
         ));
 
     Router::new()
+        .route("/", get(health_check))
         .nest("/auth", auth_routes)
         .nest("/user", protected_routes)
         .with_state(app_state)
