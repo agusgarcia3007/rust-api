@@ -4,7 +4,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use uuid::Uuid;
 
 use crate::{
-    auth::{create_access_token, create_refresh_token, generate_secure_token, verify_refresh_token},
+    auth::{create_access_token, create_refresh_token, verify_refresh_token},
     entities::{session, token_blacklist, user, Session, TokenBlacklist, User},
 };
 
@@ -17,16 +17,15 @@ impl TokenService {
         jwt_secret: &str,
         ip_address: Option<String>,
         user_agent: Option<String>,
-    ) -> Result<(String, String, String)> {
+    ) -> Result<(String, String)> {
         let (access_token, access_jti) = create_access_token(user, jwt_secret)?;
         let refresh_token_jwt = create_refresh_token(user.id, jwt_secret)?;
-        let refresh_token = generate_secure_token();
 
         let expires_at = Utc::now() + Duration::days(30);
 
         let session = session::ActiveModel {
             user_id: Set(user.id),
-            refresh_token: Set(refresh_token.clone()),
+            refresh_token: Set(refresh_token_jwt.clone()),
             access_token_jti: Set(access_jti),
             expires_at: Set(expires_at),
             ip_address: Set(ip_address),
@@ -36,20 +35,19 @@ impl TokenService {
 
         session.insert(db).await?;
 
-        Ok((access_token, refresh_token_jwt, refresh_token))
+        Ok((access_token, refresh_token_jwt))
     }
 
     pub async fn refresh_access_token(
         db: &DatabaseConnection,
         refresh_token_jwt: &str,
-        refresh_token: &str,
         jwt_secret: &str,
     ) -> Result<String> {
         let refresh_claims = verify_refresh_token(refresh_token_jwt, jwt_secret)?;
         let user_id = Uuid::parse_str(&refresh_claims.sub)?;
 
         let session = Session::find()
-            .filter(session::Column::RefreshToken.eq(refresh_token))
+            .filter(session::Column::RefreshToken.eq(refresh_token_jwt))
             .filter(session::Column::UserId.eq(user_id))
             .filter(session::Column::IsActive.eq(true))
             .filter(session::Column::ExpiresAt.gt(Utc::now()))
@@ -142,11 +140,11 @@ impl TokenService {
 
     pub async fn logout_session(
         db: &DatabaseConnection,
-        refresh_token: &str,
+        refresh_token_jwt: &str,
         user_id: Uuid,
     ) -> Result<()> {
         let session = Session::find()
-            .filter(session::Column::RefreshToken.eq(refresh_token))
+            .filter(session::Column::RefreshToken.eq(refresh_token_jwt))
             .filter(session::Column::UserId.eq(user_id))
             .filter(session::Column::IsActive.eq(true))
             .one(db)

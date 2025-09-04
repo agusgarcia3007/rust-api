@@ -65,7 +65,7 @@ pub async fn register(
         )
     })?;
 
-    let (access_token, refresh_token_jwt, _refresh_token) = TokenService::create_session(
+    let (access_token, refresh_token_jwt) = TokenService::create_session(
         &app_state.db,
         &user,
         &app_state.config.jwt_secret,
@@ -142,7 +142,7 @@ pub async fn login(
         ));
     }
 
-    let (access_token, refresh_token_jwt, _refresh_token) = TokenService::create_session(
+    let (access_token, refresh_token_jwt) = TokenService::create_session(
         &app_state.db,
         &user,
         &app_state.config.jwt_secret,
@@ -175,7 +175,6 @@ pub async fn refresh_token(
 ) -> Result<Json<RefreshTokenResponse>, (StatusCode, Json<serde_json::Value>)> {
     let new_access_token = TokenService::refresh_access_token(
         &app_state.db,
-        &payload.refresh_token,
         &payload.refresh_token,
         &app_state.config.jwt_secret,
     ).await.map_err(|_| {
